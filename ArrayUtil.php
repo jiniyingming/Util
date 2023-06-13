@@ -6,13 +6,19 @@ use ArrayAccess;
 use ArrayObject;
 use Closure;
 use Countable;
+use PHP_CodeSniffer\Standards\PEAR\Sniffs\NamingConventions\ValidVariableNameSniff;
 use ReturnTypeWillChange;
+use RuntimeException;
+use function in_array;
 use function is_array;
+use function is_int;
+use function is_string;
 
 class ArrayUtil implements ArrayAccess, Countable
 {
 
     private ArrayObject $arrayObject;
+    private array $condition;
 
     public function __construct(array $params = [])
     {
@@ -44,6 +50,15 @@ class ArrayUtil implements ArrayAccess, Countable
     {
         return new self(array_filter($this->toArray(), $func));
     }
+
+    /**
+     * @return bool
+     */
+    public function isEmpty(): bool
+    {
+        return empty($this->toArray());
+    }
+
 
     /**
      * @param $needle
@@ -123,6 +138,14 @@ class ArrayUtil implements ArrayAccess, Countable
     }
 
     /**
+     * @return float|int
+     */
+    public function uniqueCount(): float|int
+    {
+        return $this->unique()->count();
+    }
+
+    /**
      * @param $needle
      * @return float
      */
@@ -178,4 +201,154 @@ class ArrayUtil implements ArrayAccess, Countable
     {
         unset($this->toArray()[$offset]);
     }
+
+
+    /**
+     * @param array $params
+     * @return $this
+     */
+    public function where(array $params): static
+    {
+        $this->addParams($params, 'AND');
+        return $this;
+    }
+
+    /**
+     * @param array $params
+     * @return $this
+     */
+    public function orWhere(array $params): static
+    {
+        $this->addParams($params, 'OR');
+        return $this;
+    }
+
+    private array $params;
+
+    /**
+     * @param $params
+     * @param $condition
+     * @return void
+     */
+    private function addParams($params, $condition): void
+    {
+        if (!empty($params)) {
+            foreach (self::TERM_MAP as $sign) {
+                if ($i = array_search($sign, $params, true)) {
+                    $params[] = [$params[$i - 1], $params[$i], $params[$i + 1]];
+                    unset($params[$i - 1], $params[$i], $params[$i + 1]);
+                }
+            }
+            foreach ($params as $name => $value) {
+                if (is_int($name)) {
+                    $this->params[$condition][] = $value;
+                } else {
+
+                    $this->params[$condition][$name] = $value;
+                }
+            }
+        }
+
+    }
+
+
+    private const TERM_MAP = [
+        '>', '>=', '<', '<=', '<>', 'like'
+    ];
+
+    /**
+     * @return $this
+     */
+    public function get(): static
+    {
+        return $this->condition();
+    }
+
+    /**
+     * @return $this
+     */
+    private function condition(): ArrayUtil|static
+    {
+        if ($this->params) {
+            foreach ($this->params as $condition => $param) {
+                $this->condition[$condition] = $this->dealQuery($param);
+            }
+            return $this->queryData();
+        }
+
+        return $this;
+    }
+
+    /**
+     * @param $value
+     * @return $this
+     */
+    public function append($value): static
+    {
+        $this->arrayObject->append($value);
+        return $this;
+    }
+
+    /**
+     * @return ArrayUtil
+     */
+    private function queryData(): ArrayUtil
+    {
+        $map = [];
+        foreach ($this->condition as $object) {
+            $map = array_merge(array_keys($object->filter()->toArray()), $map);
+        }
+        $data = new self();
+        foreach ($map as $offset) {
+            if ($this->arrayObject->offsetExists($offset)) {
+                $data->append($this->arrayObject->offsetGet($offset));
+            }
+        }
+        return $data;
+    }
+
+    /**
+     * @param array $param
+     * @return $this
+     * 处理条件
+     */
+    private function dealQuery(array $param): static
+    {
+        return $this->filter()->map(function ($val, $key) use ($param) {
+            $isTrue = false;
+            foreach ($param as $name => $data) {
+                //--键值对
+                if (is_string($name)) {
+                    if (!isset($val[$name])) {
+                        throw new RuntimeException(sprintf('键名：%s 不存在', $name));
+                    }
+                    if (is_array($data)) {
+                        if (is_array($val[$name])) {
+                            continue;
+                        }
+                        $isTrue = in_array($val[$name], $data, false);
+                    } else {
+                        $isTrue = $val[$name] == $data;
+                    }
+                } else if (is_array($data) && count($data) === 3) {
+                    $isTrue = match ($data[1]) {
+                        '>' => $val[$data[0]] > $data[2],
+                        '<' => $val[$data[0]] < $data[2],
+                        '>=' => $val[$data[0]] >= $data[2],
+                        '<=' => $val[$data[0]] <= $data[2],
+                        '<>' => $val[$data[0]] != $data[2],
+                        'like' => str_contains($val[$data[0]], $data[2]),
+                    };
+                }
+                if ($isTrue === false) {
+                    break;
+                }
+
+            }
+            return $isTrue;
+
+        });
+    }
+
+
 }
