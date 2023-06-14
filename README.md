@@ -26,6 +26,19 @@ $collection = new ArrayUtil([
 ]);
 ```
 
+### where && orWhere
+多维数组按指定条件筛选数据
+```php
+   $object = new ArrayUtil($data);
+        $object->where(['content', 'like', 'testValid'])
+            ->orWhere([
+                'phone' => [1, 2, 3, 4],
+                'a' => 1,
+                ['d', '>=', 1]
+            ])
+            ->get();
+```
+
 ### filter()
 允许您使用回调过滤集合。 它只传递那些返回 true 的项。 所有其他项目都被删除。 filter 返回一个新实例而不更改原始实例。 它接受 value 和 key 作为回调中的两个参数。
 ```php
