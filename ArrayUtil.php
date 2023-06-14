@@ -91,12 +91,12 @@ class ArrayUtil implements ArrayAccess, Countable
      */
     public function pluck($key, $indexKey = null): ArrayUtil
     {
-        return new self(array_column($this->toArray(), $key, $indexKey));
+        return new self(array_column($this->condition()->toArray(), $key, $indexKey));
     }
 
     public function reduce(Closure $callback, $initial = null)
     {
-        return array_reduce($this->toArray(), $callback, $initial);
+        return array_reduce($this->condition()->toArray(), $callback, $initial);
     }
 
     /**
@@ -361,7 +361,7 @@ class ArrayUtil implements ArrayAccess, Countable
      */
     public function groupBy($key): ArrayUtil
     {
-        return new self(array_reduce($this->toArray(), static function ($result, $item) use ($key) {
+        return new self(array_reduce($this->condition()->toArray(), static function ($result, $item) use ($key) {
             $result[$item[$key]][] = $item;
             return $result;
         }, []));
