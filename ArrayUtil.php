@@ -23,6 +23,8 @@ class ArrayUtil implements ArrayAccess, Countable
     public function __construct(array $params = [])
     {
         $this->arrayObject = new ArrayObject($params);
+        $this->params = [];
+        $this->condition = [];
     }
 
 
@@ -76,7 +78,10 @@ class ArrayUtil implements ArrayAccess, Countable
      */
     public function unique(int $flags = SORT_STRING): ArrayUtil
     {
-        return new self(array_unique($this->toArray(), $flags));
+        $stringifyArray = array_map('json_encode', $this->condition()->toArray());
+        $uniqueArray = array_unique($stringifyArray, $flags);
+        $uniqueMultidimensionalArray = array_map('json_decode', $uniqueArray);
+        return new self($uniqueMultidimensionalArray);
     }
 
     /**
@@ -234,7 +239,8 @@ class ArrayUtil implements ArrayAccess, Countable
     {
         if (!empty($params)) {
             foreach (self::TERM_MAP as $sign) {
-                if ($i = array_search($sign, $params, true)) {
+                $i = array_search($sign, $params, true);
+                if ($i !== false && is_int($i)) {
                     $params[] = [$params[$i - 1], $params[$i], $params[$i + 1]];
                     unset($params[$i - 1], $params[$i], $params[$i + 1]);
                 }
@@ -243,7 +249,6 @@ class ArrayUtil implements ArrayAccess, Countable
                 if (is_int($name)) {
                     $this->params[$condition][] = $value;
                 } else {
-
                     $this->params[$condition][$name] = $value;
                 }
             }
@@ -253,13 +258,13 @@ class ArrayUtil implements ArrayAccess, Countable
 
 
     private const TERM_MAP = [
-        '>', '>=', '<', '<=', '<>', 'like'
+        '>', '>=', '<', '<=', '<>', 'contains'
     ];
 
     /**
-     * @return $this
+     * @return $this|ArrayUtil
      */
-    public function get(): static
+    public function get(): ArrayUtil|static
     {
         return $this->condition();
     }
@@ -328,7 +333,7 @@ class ArrayUtil implements ArrayAccess, Countable
                         }
                         $isTrue = in_array($val[$name], $data, false);
                     } else {
-                        $isTrue = $val[$name] == $data;
+                        $isTrue = strcmp($val[$name], $data) === 0;
                     }
                 } else if (is_array($data) && count($data) === 3) {
                     $isTrue = match ($data[1]) {
@@ -336,8 +341,8 @@ class ArrayUtil implements ArrayAccess, Countable
                         '<' => $val[$data[0]] < $data[2],
                         '>=' => $val[$data[0]] >= $data[2],
                         '<=' => $val[$data[0]] <= $data[2],
-                        '<>' => $val[$data[0]] != $data[2],
-                        'like' => str_contains($val[$data[0]], $data[2]),
+                        '<>' => strcmp($val[$data[0]], $data[2]) !== 0,
+                        'contains' => str_contains($val[$data[0]], $data[2]),
                     };
                 }
                 if ($isTrue === false) {
@@ -348,6 +353,18 @@ class ArrayUtil implements ArrayAccess, Countable
             return $isTrue;
 
         });
+    }
+
+    /**
+     * @param $key
+     * @return ArrayUtil
+     */
+    public function groupBy($key): ArrayUtil
+    {
+        return new self(array_reduce($this->toArray(), static function ($result, $item) use ($key) {
+            $result[$item[$key]][] = $item;
+            return $result;
+        }, []));
     }
 
 
