@@ -6,7 +6,6 @@ use ArrayAccess;
 use ArrayObject;
 use Closure;
 use Countable;
-use PHP_CodeSniffer\Standards\PEAR\Sniffs\NamingConventions\ValidVariableNameSniff;
 use ReturnTypeWillChange;
 use RuntimeException;
 use function in_array;
@@ -31,6 +30,8 @@ class ArrayUtil implements ArrayAccess, Countable
     /**
      * @param Closure $func
      * @return $this
+     * 迭代器循环
+     * 匿名函数  val key
      */
     public function map(Closure $func): static
     {
@@ -75,6 +76,7 @@ class ArrayUtil implements ArrayAccess, Countable
     /**
      * @param int $flags
      * @return ArrayUtil
+     * 去重
      */
     public function unique(int $flags = SORT_STRING): ArrayUtil
     {
@@ -88,12 +90,18 @@ class ArrayUtil implements ArrayAccess, Countable
      * @param $key
      * @param $indexKey
      * @return ArrayUtil
+     * 分割数组
      */
     public function pluck($key, $indexKey = null): ArrayUtil
     {
         return new self(array_column($this->condition()->toArray(), $key, $indexKey));
     }
 
+    /**
+     * @param Closure $callback
+     * @param $initial
+     * @return mixed|null
+     */
     public function reduce(Closure $callback, $initial = null)
     {
         return array_reduce($this->condition()->toArray(), $callback, $initial);
@@ -101,6 +109,7 @@ class ArrayUtil implements ArrayAccess, Countable
 
     /**
      * @return array
+     * 转数组结构
      */
     public function toArray(): array
     {
@@ -128,6 +137,7 @@ class ArrayUtil implements ArrayAccess, Countable
     /**
      * @param $needle
      * @return int|float
+     * 取总
      */
     public function sum($needle = null): int|float
     {
@@ -136,6 +146,7 @@ class ArrayUtil implements ArrayAccess, Countable
 
     /**
      * @return int|float
+     * 数量值
      */
     #[ReturnTypeWillChange] public function count(): int|float
     {
@@ -144,6 +155,7 @@ class ArrayUtil implements ArrayAccess, Countable
 
     /**
      * @return float|int
+     * 去重后数量
      */
     public function uniqueCount(): float|int
     {
@@ -153,6 +165,7 @@ class ArrayUtil implements ArrayAccess, Countable
     /**
      * @param $needle
      * @return float
+     * 平均值
      */
     public function avg($needle = null): float
     {
@@ -211,6 +224,7 @@ class ArrayUtil implements ArrayAccess, Countable
     /**
      * @param array $params
      * @return $this
+     * 并查询 支持区间范围查询
      */
     public function where(array $params): static
     {
@@ -221,6 +235,7 @@ class ArrayUtil implements ArrayAccess, Countable
     /**
      * @param array $params
      * @return $this
+     * 或查询 支持区间范围查询
      */
     public function orWhere(array $params): static
     {
@@ -237,6 +252,8 @@ class ArrayUtil implements ArrayAccess, Countable
      */
     private function addParams($params, $condition): void
     {
+        print_r(func_get_args());
+        die;
         if (!empty($params)) {
             foreach (self::TERM_MAP as $sign) {
                 $i = array_search($sign, $params, true);
@@ -245,6 +262,8 @@ class ArrayUtil implements ArrayAccess, Countable
                     unset($params[$i - 1], $params[$i], $params[$i + 1]);
                 }
             }
+            print_r($params);
+            die;
             foreach ($params as $name => $value) {
                 if (is_int($name)) {
                     $this->params[$condition][] = $value;
@@ -257,12 +276,17 @@ class ArrayUtil implements ArrayAccess, Countable
     }
 
 
+    /**
+     * 映射范围查询类
+     */
     private const TERM_MAP = [
         '>', '>=', '<', '<=', '<>', 'contains'
     ];
 
     /**
      * @return $this|ArrayUtil
+     * 获取查询结果集
+     * 大部分场景用于where条件结束语
      */
     public function get(): ArrayUtil|static
     {
@@ -275,6 +299,8 @@ class ArrayUtil implements ArrayAccess, Countable
     private function condition(): ArrayUtil|static
     {
         if ($this->params) {
+            print_r($this->params);
+            die;
             foreach ($this->params as $condition => $param) {
                 $this->condition[$condition] = $this->dealQuery($param);
             }
@@ -287,6 +313,7 @@ class ArrayUtil implements ArrayAccess, Countable
     /**
      * @param $value
      * @return $this
+     * 原始类追加元素
      */
     public function append($value): static
     {
@@ -296,6 +323,7 @@ class ArrayUtil implements ArrayAccess, Countable
 
     /**
      * @return ArrayUtil
+     * 生成查询结果
      */
     private function queryData(): ArrayUtil
     {
@@ -358,6 +386,7 @@ class ArrayUtil implements ArrayAccess, Countable
     /**
      * @param $key
      * @return ArrayUtil
+     * 分组动作
      */
     public function groupBy($key): ArrayUtil
     {
@@ -365,6 +394,20 @@ class ArrayUtil implements ArrayAccess, Countable
             $result[$item[$key]][] = $item;
             return $result;
         }, []));
+    }
+
+    /**
+     * @return ArrayUtil
+     * 数组多维降维合并
+     */
+    public function convertMerge(): ArrayUtil
+    {
+        $newMap = [];
+        $this->map(function ($val) use (&$newMap) {
+            $newMap = array_merge($newMap, $val->toArray());
+            return;
+        });
+        return new self($newMap);
     }
 
 
