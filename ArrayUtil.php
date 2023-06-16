@@ -225,6 +225,7 @@ class ArrayUtil implements ArrayAccess, Countable
      * @param array $params
      * @return $this
      * 并查询 支持区间范围查询
+     * 支持闭包处理查询结果
      */
     public function where(array $params): static
     {
@@ -236,6 +237,7 @@ class ArrayUtil implements ArrayAccess, Countable
      * @param array $params
      * @return $this
      * 或查询 支持区间范围查询
+     * 支持闭包处理查询结果
      */
     public function orWhere(array $params): static
     {
@@ -252,8 +254,6 @@ class ArrayUtil implements ArrayAccess, Countable
      */
     private function addParams($params, $condition): void
     {
-        print_r(func_get_args());
-        die;
         if (!empty($params)) {
             foreach (self::TERM_MAP as $sign) {
                 $i = array_search($sign, $params, true);
@@ -262,8 +262,6 @@ class ArrayUtil implements ArrayAccess, Countable
                     unset($params[$i - 1], $params[$i], $params[$i + 1]);
                 }
             }
-            print_r($params);
-            die;
             foreach ($params as $name => $value) {
                 if (is_int($name)) {
                     $this->params[$condition][] = $value;
@@ -299,8 +297,6 @@ class ArrayUtil implements ArrayAccess, Countable
     private function condition(): ArrayUtil|static
     {
         if ($this->params) {
-            print_r($this->params);
-            die;
             foreach ($this->params as $condition => $param) {
                 $this->condition[$condition] = $this->dealQuery($param);
             }
@@ -351,7 +347,14 @@ class ArrayUtil implements ArrayAccess, Countable
             $isTrue = false;
             foreach ($param as $name => $data) {
                 //--键值对
-                if (is_string($name)) {
+
+                if ($data instanceof Closure) {
+                    if (!isset($val[$name])) {
+                        throw new RuntimeException(sprintf('键名：%s 不存在', $name));
+                    }
+                    $isTrue = $data($val[$name]);
+
+                } elseif (is_string($name)) {
                     if (!isset($val[$name])) {
                         throw new RuntimeException(sprintf('键名：%s 不存在', $name));
                     }
