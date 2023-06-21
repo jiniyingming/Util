@@ -220,6 +220,8 @@ class ArrayUtil implements ArrayAccess, Countable
         unset($this->toArray()[$offset]);
     }
 
+    private const AND = 'AND';
+    private const OR = 'OR';
 
     /**
      * @param array $params
@@ -229,7 +231,7 @@ class ArrayUtil implements ArrayAccess, Countable
      */
     public function where(array $params): static
     {
-        $this->addParams($params, 'AND');
+        $this->addParams($params, self::AND);
         return $this;
     }
 
@@ -241,7 +243,7 @@ class ArrayUtil implements ArrayAccess, Countable
      */
     public function orWhere(array $params): static
     {
-        $this->addParams($params, 'OR');
+        $this->addParams($params, self::OR);
         return $this;
     }
 
@@ -266,7 +268,11 @@ class ArrayUtil implements ArrayAccess, Countable
                 if (is_int($name)) {
                     $this->params[$condition][] = $value;
                 } else {
-                    $this->params[$condition][$name] = $value;
+//                    if (isset($this->params[$condition][$name])) {
+                    $this->params[$condition][] = [$name => $value];
+//                    } else {
+//                        $this->params[$condition][$name] = $value;
+//                    }
                 }
             }
         }
@@ -298,7 +304,7 @@ class ArrayUtil implements ArrayAccess, Countable
     {
         if ($this->params) {
             foreach ($this->params as $condition => $param) {
-                $this->condition[$condition] = $this->dealQuery($param);
+                $this->condition[$condition] = $this->dealQuery($param, $condition);
             }
             return $this->queryData();
         }
@@ -336,50 +342,82 @@ class ArrayUtil implements ArrayAccess, Countable
         return $data;
     }
 
+
     /**
      * @param array $param
+     * @param string $condition
      * @return $this
      * 处理条件
      */
-    private function dealQuery(array $param): static
+    private function dealQuery(array $param, string $condition): static
     {
-        return $this->filter()->map(function ($val, $key) use ($param) {
+        $dealClosureFunc = function ($val, $name, $func) {
+            if (!isset($val[$name])) {
+                throw new RuntimeException(sprintf('键名：%s 不存在', $name));
+            }
+            return $func($val[$name]);
+        };
+
+        $dealChooseFunc = function ($val, $data) {
+            return match ($data[1]) {
+                '>' => $val[$data[0]] > $data[2],
+                '<' => $val[$data[0]] < $data[2],
+                '>=' => $val[$data[0]] >= $data[2],
+                '<=' => $val[$data[0]] <= $data[2],
+                '<>' => strcmp($val[$data[0]], $data[2]) !== 0,
+                'contains' => str_contains($val[$data[0]], $data[2]),
+            };
+        };
+
+        $dealKeyValFunc = function ($val, $name, $data) {
             $isTrue = false;
+            if (!isset($val[$name])) {
+                throw new RuntimeException(sprintf('键名：%s 不存在', $name));
+            }
+            if (is_array($data)) {
+                if (!is_array($val[$name])) {
+                    $isTrue = in_array($val[$name], $data, false);
+                }
+            } else {
+                $isTrue = strcmp($val[$name], $data) === 0;
+            }
+            return $isTrue;
+        };
+        return $this->filter()->map(function ($val) use ($condition, $param, $dealClosureFunc, $dealChooseFunc, $dealKeyValFunc) {
+            $isTrue = false;
+            $judgeMap = [];
             foreach ($param as $name => $data) {
-                //--键值对
+                if ($data instanceof Closure) {//-- 键 => function
+                    $isTrue = $dealClosureFunc($val, $name, $data);
+                } elseif (is_string($name)) {//-- 键 => 值
+                    $isTrue = $dealKeyValFunc($val, $name, $data);
+                } else if (is_array($data)) {//-- 键 => 比较符 => 值
+                    $size = count($data);
+                    switch ($size) {
+                        case 1://-- 键 => 值
+                            $key = array_key_first($data);
+                            if ($data[$key] instanceof Closure) {
+                                $isTrue = $dealClosureFunc($val, $key, $data[$key]);
+                            } else {
+                                $isTrue = $dealKeyValFunc($val, $key, $data[$key]);
+                            }
+                            break;
+                        case 3:
+                            $isTrue = $dealChooseFunc($val, $data);
+                            break;
+                        case 2:
 
-                if ($data instanceof Closure) {
-                    if (!isset($val[$name])) {
-                        throw new RuntimeException(sprintf('键名：%s 不存在', $name));
+                            break;
                     }
-                    $isTrue = $data($val[$name]);
-
-                } elseif (is_string($name)) {
-                    if (!isset($val[$name])) {
-                        throw new RuntimeException(sprintf('键名：%s 不存在', $name));
-                    }
-                    if (is_array($data)) {
-                        if (is_array($val[$name])) {
-                            continue;
-                        }
-                        $isTrue = in_array($val[$name], $data, false);
-                    } else {
-                        $isTrue = strcmp($val[$name], $data) === 0;
-                    }
-                } else if (is_array($data) && count($data) === 3) {
-                    $isTrue = match ($data[1]) {
-                        '>' => $val[$data[0]] > $data[2],
-                        '<' => $val[$data[0]] < $data[2],
-                        '>=' => $val[$data[0]] >= $data[2],
-                        '<=' => $val[$data[0]] <= $data[2],
-                        '<>' => strcmp($val[$data[0]], $data[2]) !== 0,
-                        'contains' => str_contains($val[$data[0]], $data[2]),
-                    };
                 }
-                if ($isTrue === false) {
-                    break;
-                }
+                $judgeMap[] = $isTrue;
+            }
 
+            if ($condition === self::AND) {
+                return !in_array(false, $judgeMap);
+            }
+            if ($condition === self::OR) {
+                return in_array(true, $judgeMap);
             }
             return $isTrue;
 
